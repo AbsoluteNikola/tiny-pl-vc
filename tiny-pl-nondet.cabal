@@ -1,0 +1,50 @@
+cabal-version:      3.4
+name:               tiny-pl-nondet
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            MIT
+license-file:       LICENSE
+author:             Nikolay Rulev
+maintainer:         nikolayr2001@gmail.com
+-- copyright:
+category:           Language
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+executable tiny-pl-nondet
+    import:           warnings
+    main-is:          Main.hs
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+        base ^>=4.16.4.0
+      , tiny-pl-nondet
+      , text
+    hs-source-dirs:   app
+    default-language: GHC2021
+
+library
+    import:           warnings
+    exposed-modules:
+        Tiny.Syntax.AbsSyntax
+        Tiny.Syntax.PrintSyntax
+        Tiny.Syntax.LexSyntax
+        Tiny.Syntax.ParSyntax
+        Tiny.Semant
+    -- other-extensions:
+    build-tool-depends:
+        alex:alex,
+        happy:happy
+    build-depends:
+        base ^>=4.16.4.0
+      , array
+      , text
+      , containers
+
+    hs-source-dirs:   src
+    default-language: GHC2021

@@ -21,7 +21,6 @@ import Prelude
   )
 import Data.Char ( Char, isSpace )
 import qualified Tiny.Syntax.AbsSyntax
-import qualified Data.Text
 
 -- | The top-level printing method.
 
@@ -139,7 +138,7 @@ instance Print Double where
   prt _ x = doc (shows x)
 
 instance Print Tiny.Syntax.AbsSyntax.VarIdent where
-  prt _ (Tiny.Syntax.AbsSyntax.VarIdent i) = doc $ showString (Data.Text.unpack i)
+  prt _ (Tiny.Syntax.AbsSyntax.VarIdent i) = doc $ showString i
 instance Print Tiny.Syntax.AbsSyntax.Expr where
   prt i = \case
     Tiny.Syntax.AbsSyntax.ExprVar varident -> prPrec i 0 (concatD [prt 0 varident])
@@ -167,6 +166,7 @@ instance Print Tiny.Syntax.AbsSyntax.BoolCondOp where
   prt i = \case
     Tiny.Syntax.AbsSyntax.Or -> prPrec i 0 (concatD [doc (showString "||")])
     Tiny.Syntax.AbsSyntax.And -> prPrec i 0 (concatD [doc (showString "&&")])
+    Tiny.Syntax.AbsSyntax.Implication -> prPrec i 0 (concatD [doc (showString "->")])
 
 instance Print Tiny.Syntax.AbsSyntax.Cond where
   prt i = \case
@@ -174,9 +174,9 @@ instance Print Tiny.Syntax.AbsSyntax.Cond where
     Tiny.Syntax.AbsSyntax.BoolCond cond1 boolcondop cond2 -> prPrec i 0 (concatD [doc (showString "("), prt 0 cond1, prt 0 boolcondop, prt 0 cond2, doc (showString ")")])
     Tiny.Syntax.AbsSyntax.NotCond cond -> prPrec i 0 (concatD [doc (showString "("), doc (showString "!"), prt 0 cond, doc (showString ")")])
 
-instance Print Tiny.Syntax.AbsSyntax.Annotatation where
+instance Print Tiny.Syntax.AbsSyntax.Annotation where
   prt i = \case
-    Tiny.Syntax.AbsSyntax.Annotatation cond -> prPrec i 0 (concatD [doc (showString "annotate"), doc (showString "with"), prt 0 cond])
+    Tiny.Syntax.AbsSyntax.Annotation cond -> prPrec i 0 (concatD [doc (showString "annotate"), doc (showString "with"), prt 0 cond])
 
 instance Print [Tiny.Syntax.AbsSyntax.Statement] where
   prt _ [] = concatD []
@@ -187,4 +187,9 @@ instance Print Tiny.Syntax.AbsSyntax.Statement where
   prt i = \case
     Tiny.Syntax.AbsSyntax.Assign varident expr -> prPrec i 0 (concatD [prt 0 varident, doc (showString ":="), prt 0 expr])
     Tiny.Syntax.AbsSyntax.Composition statements -> prPrec i 0 (concatD [doc (showString "("), prt 0 statements, doc (showString ")")])
-    Tiny.Syntax.AbsSyntax.While annotatation cond statement -> prPrec i 0 (concatD [prt 0 annotatation, doc (showString "while"), prt 0 cond, doc (showString "do"), prt 0 statement])
+    Tiny.Syntax.AbsSyntax.While annotation cond statement -> prPrec i 0 (concatD [prt 0 annotation, doc (showString "while"), prt 0 cond, doc (showString "do"), prt 0 statement])
+    Tiny.Syntax.AbsSyntax.If cond statement1 statement2 -> prPrec i 0 (concatD [doc (showString "if"), prt 0 cond, doc (showString "then"), prt 0 statement1, doc (showString "else"), prt 0 statement2])
+
+instance Print Tiny.Syntax.AbsSyntax.Program where
+  prt i = \case
+    Tiny.Syntax.AbsSyntax.Program annotation1 statements annotation2 -> prPrec i 0 (concatD [prt 0 annotation1, prt 0 statements, prt 0 annotation2])

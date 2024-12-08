@@ -20,19 +20,23 @@ GtEq.  IntCondOp ::= ">=";
 Lt.    IntCondOp ::= "<";
 LtEq.  IntCondOp ::= "<=";
 
-Or.  BoolCondOp ::= "||";
-And. BoolCondOp ::= "&&";
+Or.          BoolCondOp ::= "||";
+And.         BoolCondOp ::= "&&";
+Implication. BoolCondOp ::= "->";
 
 IntCond.  Cond  ::= "(" Expr IntCondOp Expr ")";
 BoolCond. Cond ::= "(" Cond BoolCondOp Cond ")";
 NotCond.  Cond  ::= "(" "!" Cond ")";
 
-Annotatation. Annotatation ::= "annotate with" Cond;
+Annotation. Annotation ::= "annotate with" Cond;
 
 separator nonempty Statement ";";
 
 Assign.      Statement ::= VarIdent ":=" Expr;
 Composition. Statement ::= "(" [Statement] ")";
-While.       Statement ::= Annotatation "while" Cond "do" Statement;
+While.       Statement ::= Annotation "while" Cond "do" Statement;
+If.          Statement ::= "if" Cond "then" Statement "else" Statement;
 
-entrypoints Statement;
+Program.     Program ::= Annotation [Statement] Annotation;
+
+entrypoints Program;

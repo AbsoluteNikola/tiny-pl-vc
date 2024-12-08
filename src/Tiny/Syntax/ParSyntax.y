@@ -8,18 +8,17 @@
 module Tiny.Syntax.ParSyntax
   ( happyError
   , myLexer
-  , pStatement
+  , pProgram
   ) where
 
 import Prelude
 
 import qualified Tiny.Syntax.AbsSyntax
 import Tiny.Syntax.LexSyntax
-import qualified Data.Text
 
 }
 
-%name pStatement Statement
+%name pProgram Program
 -- no lexer declaration
 %monad { Err } { (>>=) } { return }
 %tokentype {Token}
@@ -32,27 +31,31 @@ import qualified Data.Text
   '*'        { PT _ (TS _ 6)        }
   '+'        { PT _ (TS _ 7)        }
   '-'        { PT _ (TS _ 8)        }
-  '/'        { PT _ (TS _ 9)        }
-  '/='       { PT _ (TS _ 10)       }
-  ':='       { PT _ (TS _ 11)       }
-  ';'        { PT _ (TS _ 12)       }
-  '<'        { PT _ (TS _ 13)       }
-  '<='       { PT _ (TS _ 14)       }
-  '='        { PT _ (TS _ 15)       }
-  '>'        { PT _ (TS _ 16)       }
-  '>='       { PT _ (TS _ 17)       }
-  'annotate' { PT _ (TS _ 18)       }
-  'do'       { PT _ (TS _ 19)       }
-  'while'    { PT _ (TS _ 20)       }
-  'with'     { PT _ (TS _ 21)       }
-  '||'       { PT _ (TS _ 22)       }
+  '->'       { PT _ (TS _ 9)        }
+  '/'        { PT _ (TS _ 10)       }
+  '/='       { PT _ (TS _ 11)       }
+  ':='       { PT _ (TS _ 12)       }
+  ';'        { PT _ (TS _ 13)       }
+  '<'        { PT _ (TS _ 14)       }
+  '<='       { PT _ (TS _ 15)       }
+  '='        { PT _ (TS _ 16)       }
+  '>'        { PT _ (TS _ 17)       }
+  '>='       { PT _ (TS _ 18)       }
+  'annotate' { PT _ (TS _ 19)       }
+  'do'       { PT _ (TS _ 20)       }
+  'else'     { PT _ (TS _ 21)       }
+  'if'       { PT _ (TS _ 22)       }
+  'then'     { PT _ (TS _ 23)       }
+  'while'    { PT _ (TS _ 24)       }
+  'with'     { PT _ (TS _ 25)       }
+  '||'       { PT _ (TS _ 26)       }
   L_integ    { PT _ (TI $$)         }
   L_VarIdent { PT _ (T_VarIdent $$) }
 
 %%
 
 Integer :: { Integer }
-Integer  : L_integ  { (read (Data.Text.unpack $1)) :: Integer }
+Integer  : L_integ  { (read $1) :: Integer }
 
 VarIdent :: { Tiny.Syntax.AbsSyntax.VarIdent }
 VarIdent  : L_VarIdent { Tiny.Syntax.AbsSyntax.VarIdent $1 }
@@ -84,6 +87,7 @@ BoolCondOp :: { Tiny.Syntax.AbsSyntax.BoolCondOp }
 BoolCondOp
   : '||' { Tiny.Syntax.AbsSyntax.Or }
   | '&&' { Tiny.Syntax.AbsSyntax.And }
+  | '->' { Tiny.Syntax.AbsSyntax.Implication }
 
 Cond :: { Tiny.Syntax.AbsSyntax.Cond }
 Cond
@@ -91,9 +95,9 @@ Cond
   | '(' Cond BoolCondOp Cond ')' { Tiny.Syntax.AbsSyntax.BoolCond $2 $3 $4 }
   | '(' '!' Cond ')' { Tiny.Syntax.AbsSyntax.NotCond $3 }
 
-Annotatation :: { Tiny.Syntax.AbsSyntax.Annotatation }
-Annotatation
-  : 'annotate' 'with' Cond { Tiny.Syntax.AbsSyntax.Annotatation $3 }
+Annotation :: { Tiny.Syntax.AbsSyntax.Annotation }
+Annotation
+  : 'annotate' 'with' Cond { Tiny.Syntax.AbsSyntax.Annotation $3 }
 
 ListStatement :: { [Tiny.Syntax.AbsSyntax.Statement] }
 ListStatement
@@ -104,7 +108,12 @@ Statement :: { Tiny.Syntax.AbsSyntax.Statement }
 Statement
   : VarIdent ':=' Expr { Tiny.Syntax.AbsSyntax.Assign $1 $3 }
   | '(' ListStatement ')' { Tiny.Syntax.AbsSyntax.Composition $2 }
-  | Annotatation 'while' Cond 'do' Statement { Tiny.Syntax.AbsSyntax.While $1 $3 $5 }
+  | Annotation 'while' Cond 'do' Statement { Tiny.Syntax.AbsSyntax.While $1 $3 $5 }
+  | 'if' Cond 'then' Statement 'else' Statement { Tiny.Syntax.AbsSyntax.If $2 $4 $6 }
+
+Program :: { Tiny.Syntax.AbsSyntax.Program }
+Program
+  : Annotation ListStatement Annotation { Tiny.Syntax.AbsSyntax.Program $1 $2 $3 }
 
 {
 
@@ -118,7 +127,7 @@ happyError ts = Left $
     [Err _] -> " due to lexer error"
     t:_     -> " before `" ++ (prToken t) ++ "'"
 
-myLexer :: Data.Text.Text -> [Token]
+myLexer :: String -> [Token]
 myLexer = tokens
 
 }

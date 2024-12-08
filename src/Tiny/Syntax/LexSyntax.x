@@ -11,7 +11,6 @@ module Tiny.Syntax.LexSyntax where
 
 import Prelude
 
-import qualified Data.Text
 import qualified Data.Bits
 import Data.Char     (ord)
 import Data.Function (on)
@@ -29,7 +28,7 @@ $u = [. \n]          -- universal: any character
 
 -- Symbols and non-identifier-like reserved words
 
-@rsyms = \( | \) | \+ | \- | \* | \/ | \% | \= | \/ \= | \> | \> \= | \< | \< \= | \| \| | \& \& | \! | \; | \: \=
+@rsyms = \( | \) | \+ | \- | \* | \/ | \% | \= | \/ \= | \> | \> \= | \< | \< \= | \| \| | \& \& | \- \> | \! | \; | \: \=
 
 :-
 
@@ -60,27 +59,27 @@ $d+
 
 {
 -- | Create a token with position.
-tok :: (Data.Text.Text -> Tok) -> (Posn -> Data.Text.Text -> Token)
+tok :: (String -> Tok) -> (Posn -> String -> Token)
 tok f p = PT p . f
 
 -- | Token without position.
 data Tok
   = TK {-# UNPACK #-} !TokSymbol  -- ^ Reserved word or symbol.
-  | TL !Data.Text.Text            -- ^ String literal.
-  | TI !Data.Text.Text            -- ^ Integer literal.
-  | TV !Data.Text.Text            -- ^ Identifier.
-  | TD !Data.Text.Text            -- ^ Float literal.
-  | TC !Data.Text.Text            -- ^ Character literal.
-  | T_VarIdent !Data.Text.Text
+  | TL !String                    -- ^ String literal.
+  | TI !String                    -- ^ Integer literal.
+  | TV !String                    -- ^ Identifier.
+  | TD !String                    -- ^ Float literal.
+  | TC !String                    -- ^ Character literal.
+  | T_VarIdent !String
   deriving (Eq, Show, Ord)
 
 -- | Smart constructor for 'Tok' for the sake of backwards compatibility.
-pattern TS :: Data.Text.Text -> Int -> Tok
+pattern TS :: String -> Int -> Tok
 pattern TS t i = TK (TokSymbol t i)
 
 -- | Keyword or symbol tokens have a unique ID.
 data TokSymbol = TokSymbol
-  { tsText :: Data.Text.Text
+  { tsText :: String
       -- ^ Keyword or symbol text.
   , tsID   :: !Int
       -- ^ Unique ID.
@@ -121,34 +120,34 @@ posLineCol :: Posn -> (Int, Int)
 posLineCol (Pn _ l c) = (l,c)
 
 -- | Convert a token into "position token" form.
-mkPosToken :: Token -> ((Int, Int), Data.Text.Text)
+mkPosToken :: Token -> ((Int, Int), String)
 mkPosToken t = (tokenLineCol t, tokenText t)
 
 -- | Convert a token to its text.
-tokenText :: Token -> Data.Text.Text
+tokenText :: Token -> String
 tokenText t = case t of
   PT _ (TS s _) -> s
-  PT _ (TL s)   -> Data.Text.pack (show s)
+  PT _ (TL s)   -> show s
   PT _ (TI s)   -> s
   PT _ (TV s)   -> s
   PT _ (TD s)   -> s
   PT _ (TC s)   -> s
-  Err _         -> Data.Text.pack "#error"
+  Err _         -> "#error"
   PT _ (T_VarIdent s) -> s
 
 -- | Convert a token to a string.
 prToken :: Token -> String
-prToken t = Data.Text.unpack (tokenText t)
+prToken t = tokenText t
 
 -- | Finite map from text to token organized as binary search tree.
 data BTree
   = N -- ^ Nil (leaf).
-  | B Data.Text.Text Tok BTree BTree
+  | B String Tok BTree BTree
       -- ^ Binary node.
   deriving (Show)
 
 -- | Convert potential keyword into token or use fallback conversion.
-eitherResIdent :: (Data.Text.Text -> Tok) -> Data.Text.Text -> Tok
+eitherResIdent :: (String -> Tok) -> String -> Tok
 eitherResIdent tv s = treeFind resWords
   where
   treeFind N = tv s
@@ -161,22 +160,27 @@ eitherResIdent tv s = treeFind resWords
 -- | The keywords and symbols of the language organized as binary search tree.
 resWords :: BTree
 resWords =
-  b ";" 12
-    (b "*" 6
-       (b "&&" 3 (b "%" 2 (b "!" 1 N N) N) (b ")" 5 (b "(" 4 N N) N))
-       (b "/" 9 (b "-" 8 (b "+" 7 N N) N) (b ":=" 11 (b "/=" 10 N N) N)))
-    (b "annotate" 18
-       (b "=" 15
-          (b "<=" 14 (b "<" 13 N N) N) (b ">=" 17 (b ">" 16 N N) N))
-       (b "with" 21 (b "while" 20 (b "do" 19 N N) N) (b "||" 22 N N)))
+  b "<" 14
+    (b "+" 7
+       (b "(" 4
+          (b "%" 2 (b "!" 1 N N) (b "&&" 3 N N)) (b "*" 6 (b ")" 5 N N) N))
+       (b "/=" 11
+          (b "->" 9 (b "-" 8 N N) (b "/" 10 N N))
+          (b ";" 13 (b ":=" 12 N N) N)))
+    (b "else" 21
+       (b ">=" 18
+          (b "=" 16 (b "<=" 15 N N) (b ">" 17 N N))
+          (b "do" 20 (b "annotate" 19 N N) N))
+       (b "while" 24
+          (b "then" 23 (b "if" 22 N N) N) (b "||" 26 (b "with" 25 N N) N)))
   where
   b s n = B bs (TS bs n)
     where
-    bs = Data.Text.pack s
+    bs = s
 
 -- | Unquote string literal.
-unescapeInitTail :: Data.Text.Text -> Data.Text.Text
-unescapeInitTail = Data.Text.pack . unesc . tail . Data.Text.unpack
+unescapeInitTail :: String -> String
+unescapeInitTail = id . unesc . tail . id
   where
   unesc s = case s of
     '\\':c:cs | elem c ['\"', '\\', '\''] -> c : unesc cs
@@ -209,9 +213,9 @@ type Byte = Word8
 type AlexInput = (Posn,     -- current position,
                   Char,     -- previous char
                   [Byte],   -- pending bytes on the current char
-                  Data.Text.Text)   -- current input string
+                  String)   -- current input string
 
-tokens :: Data.Text.Text -> [Token]
+tokens :: String -> [Token]
 tokens str = go (alexStartPos, '\n', [], str)
     where
       go :: AlexInput -> [Token]
@@ -220,14 +224,14 @@ tokens str = go (alexStartPos, '\n', [], str)
                 AlexEOF                   -> []
                 AlexError (pos, _, _, _)  -> [Err pos]
                 AlexSkip  inp' len        -> go inp'
-                AlexToken inp' len act    -> act pos (Data.Text.take len str) : (go inp')
+                AlexToken inp' len act    -> act pos (take len str) : (go inp')
 
 alexGetByte :: AlexInput -> Maybe (Byte,AlexInput)
 alexGetByte (p, c, (b:bs), s) = Just (b, (p, c, bs, s))
 alexGetByte (p, _, [], s) =
-  case Data.Text.uncons s of
-    Nothing  -> Nothing
-    Just (c,s) ->
+  case s of
+    []  -> Nothing
+    (c:s) ->
              let p'     = alexMove p c
                  (b:bs) = utf8Encode c
               in p' `seq` Just (b, (p', c, bs, s))

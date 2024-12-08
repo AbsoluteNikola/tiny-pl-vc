@@ -46,6 +46,7 @@ transBoolCondOp :: Tiny.Syntax.AbsSyntax.BoolCondOp -> Result
 transBoolCondOp x = case x of
   Tiny.Syntax.AbsSyntax.Or -> failure x
   Tiny.Syntax.AbsSyntax.And -> failure x
+  Tiny.Syntax.AbsSyntax.Implication -> failure x
 
 transCond :: Tiny.Syntax.AbsSyntax.Cond -> Result
 transCond x = case x of
@@ -53,12 +54,17 @@ transCond x = case x of
   Tiny.Syntax.AbsSyntax.BoolCond cond1 boolcondop cond2 -> failure x
   Tiny.Syntax.AbsSyntax.NotCond cond -> failure x
 
-transAnnotatation :: Tiny.Syntax.AbsSyntax.Annotatation -> Result
-transAnnotatation x = case x of
-  Tiny.Syntax.AbsSyntax.Annotatation cond -> failure x
+transAnnotation :: Tiny.Syntax.AbsSyntax.Annotation -> Result
+transAnnotation x = case x of
+  Tiny.Syntax.AbsSyntax.Annotation cond -> failure x
 
 transStatement :: Tiny.Syntax.AbsSyntax.Statement -> Result
 transStatement x = case x of
   Tiny.Syntax.AbsSyntax.Assign varident expr -> failure x
   Tiny.Syntax.AbsSyntax.Composition statements -> failure x
-  Tiny.Syntax.AbsSyntax.While annotatation cond statement -> failure x
+  Tiny.Syntax.AbsSyntax.While annotation cond statement -> failure x
+  Tiny.Syntax.AbsSyntax.If cond statement1 statement2 -> failure x
+
+transProgram :: Tiny.Syntax.AbsSyntax.Program -> Result
+transProgram x = case x of
+  Tiny.Syntax.AbsSyntax.Program annotation1 statements annotation2 -> failure x

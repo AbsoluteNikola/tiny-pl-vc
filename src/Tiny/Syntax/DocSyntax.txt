@@ -24,14 +24,15 @@ VarIdent literals are recognized by the regular expression
 The set of reserved words is the set of terminals appearing in the grammar. Those reserved words that consist of non-letter characters are called symbols, and they are treated in a different way from those that are similar to identifiers. The lexer follows rules familiar from languages like Haskell, C, and Java, including longest match and spacing conventions.
 
 The reserved words used in Syntax are the following:
-  | ``annotate`` | ``do`` | ``while`` | ``with``
+  | ``annotate`` | ``do`` | ``else`` | ``if``
+  | ``then`` | ``while`` | ``with`` |
 
 The symbols used in Syntax are the following:
   | ( | ) | + | -
   | * | / | % | =
   | /= | > | >= | <
-  | <= | || | && | !
-  | ; | := |  |
+  | <= | || | && | ->
+  | ! | ; | := |
 
 ===Comments===
 Single-line comments begin with //.Multiple-line comments are  enclosed with /* and */.
@@ -58,15 +59,18 @@ All other symbols are terminals.
   |  |  **|**  | ``<=``
   | //BoolCondOp// | -> | ``||``
   |  |  **|**  | ``&&``
+  |  |  **|**  | ``->``
   | //Cond// | -> | ``(`` //Expr// //IntCondOp// //Expr// ``)``
   |  |  **|**  | ``(`` //Cond// //BoolCondOp// //Cond// ``)``
   |  |  **|**  | ``(`` ``!`` //Cond// ``)``
-  | //Annotatation// | -> | ``annotate`` ``with`` //Cond//
+  | //Annotation// | -> | ``annotate`` ``with`` //Cond//
   | //[Statement]// | -> | //Statement//
   |  |  **|**  | //Statement// ``;`` //[Statement]//
   | //Statement// | -> | //VarIdent// ``:=`` //Expr//
   |  |  **|**  | ``(`` //[Statement]// ``)``
-  |  |  **|**  | //Annotatation// ``while`` //Cond// ``do`` //Statement//
+  |  |  **|**  | //Annotation// ``while`` //Cond// ``do`` //Statement//
+  |  |  **|**  | ``if`` //Cond// ``then`` //Statement// ``else`` //Statement//
+  | //Program// | -> | //Annotation// //[Statement]// //Annotation//
 
 
 

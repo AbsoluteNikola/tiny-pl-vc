@@ -8,11 +8,10 @@
 
 module Tiny.Syntax.AbsSyntax where
 
-import Prelude (Integer)
+import Prelude (Integer, String)
 import qualified Prelude as C (Eq, Ord, Show, Read)
 import qualified Data.String
 
-import qualified Data.Text
 import qualified Data.Data    as C (Data, Typeable)
 import qualified GHC.Generics as C (Generic)
 
@@ -26,7 +25,7 @@ data IntOp = Plus | Minus | Multiply | Div | Mod
 data IntCondOp = Eq | NotEq | Gt | GtEq | Lt | LtEq
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
-data BoolCondOp = Or | And
+data BoolCondOp = Or | And | Implication
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data Cond
@@ -35,15 +34,19 @@ data Cond
     | NotCond Cond
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
-data Annotatation = Annotatation Cond
+data Annotation = Annotation Cond
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data Statement
     = Assign VarIdent Expr
     | Composition [Statement]
-    | While Annotatation Cond Statement
+    | While Annotation Cond Statement
+    | If Cond Statement Statement
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
-newtype VarIdent = VarIdent Data.Text.Text
+data Program = Program Annotation [Statement] Annotation
+  deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
+
+newtype VarIdent = VarIdent String
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic, Data.String.IsString)
 

@@ -1,132 +1,113 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Tiny.Semant where
 
 import Tiny.Syntax.AbsSyntax
-import qualified Data.Map.Strict as Map
-import qualified Data.Set as Set
-import Data.Text (Text, pack, intercalate)
-import qualified Data.Text.IO as TIO
 import Prelude hiding (fail)
-import Data.Traversable (for)
-import Control.Monad (join, when)
-import Data.Bool (bool)
+import Control.Monad.Except (ExceptT, MonadIO, MonadError (throwError), runExceptT)
+import Tiny.Syntax.PrintSyntax (printTree)
 import Data.Foldable (for_)
-import Data.Int (Int16, Int8)
 
-type TPLInt = Int16
+newtype CheckerM a = CheckerM { runCheckerM :: ExceptT String IO a }
+  deriving (Functor, Applicative, Monad, MonadIO, MonadError String)
 
-newtype State = State { unState :: Map.Map Text TPLInt }
-  deriving (Eq, Ord, Show)
+type Checker = CheckerM Cond
 
-type States = Set.Set State
+failure :: Show x => x -> CheckerM a
+failure x = throwError $ "unimplemented case: " <> show x
 
-printStates :: States -> IO ()
-printStates states = do
-  when (Set.null states) $
-    TIO.putStrLn "No possible states"
-  for_ (zip [(1:: Int)..] (Set.toList states)) $ \(ix, State s) -> do
+substituteExpr :: VarIdent -> Expr -> Expr -> Expr
+substituteExpr varId substE expr = case expr of
+  ExprVar exprVarId
+    | exprVarId == varId -> substE
+    | otherwise -> expr
+  ExprConst _ -> expr
+  ExprOp expr1 intop expr2 ->
+    ExprOp
+      (substituteExpr varId substE expr1)
+      intop
+      (substituteExpr varId substE expr2)
+
+substituteExprToCond :: VarIdent -> Expr -> Cond -> Cond
+substituteExprToCond varId substE x = case x of
+  IntCond expr1 intcondop expr2 ->
+    IntCond
+      (substituteExpr varId substE expr1)
+      intcondop
+      (substituteExpr varId substE expr2)
+  BoolCond cond1 boolcondop cond2 ->
+    BoolCond
+      (substituteExprToCond varId substE cond1)
+      boolcondop
+      (substituteExprToCond varId substE cond2)
+  NotCond cond -> NotCond $ substituteExprToCond varId substE cond
+
+genProgramVerificationConditions :: Program -> CheckerM [Cond]
+genProgramVerificationConditions (Program (Annotation preCond) statements (Annotation postCond)) = do
+  progVc <- genVerificationCondition postCond (Composition statements)
+  programAnnotation <- genAnnotateCondition postCond (Composition statements)
+  let implCond = BoolCond preCond Implication programAnnotation
+  pure $ implCond : progVc
+
+genAnnotateCondition :: Cond -> Statement -> CheckerM Cond
+genAnnotateCondition postCond = \case
+  Assign varident expr -> pure $ substituteExprToCond varident expr postCond
+  Composition statements -> case statements of
+    [] -> failure @String "Empty composition! Should be impossible after parsing"
+    [s] -> genAnnotateCondition postCond s
+    s1:otherStatements -> do
+      betaCond <- genAnnotateCondition postCond (Composition otherStatements)
+      genAnnotateCondition betaCond s1
+  If ifCond thenS elseS -> do
+    thenCond <- genAnnotateCondition postCond thenS
+    elseCond <- genAnnotateCondition postCond elseS
+    pure $ BoolCond
+      (BoolCond ifCond And thenCond)
+      Or
+      (BoolCond (NotCond ifCond) And elseCond)
+  While (Annotation annotation) _cond _statement -> pure annotation
+
+genVerificationCondition :: Cond -> Statement -> CheckerM [Cond]
+genVerificationCondition postCond x = case x of
+  Assign _varident _expr -> pure []
+  Composition statements  -> case statements of
+    [] -> failure @String "Empty composition! Should be impossible after parsing"
+    [s] -> genVerificationCondition postCond s
+    s1:otherStatements -> do
+      otherStatementsCondtions <- genVerificationCondition postCond (Composition otherStatements)
+      otherStatementsAnnotation <- genAnnotateCondition postCond (Composition otherStatements)
+      s1Conditions <- genVerificationCondition otherStatementsAnnotation s1
+      pure $ otherStatementsCondtions ++ s1Conditions
+  If _ifCond thenS elseS -> do
+    thenConds <- genVerificationCondition postCond thenS
+    elseConds <- genVerificationCondition postCond elseS
+    pure $ thenConds ++ elseConds
+  While (Annotation annotation) whileCond doS -> do
+    doConds <- genVerificationCondition annotation doS
+    doAnnotation <- genAnnotateCondition annotation doS
     let
-      vars = map (\(name, value) -> name <> " = " <> (pack . show $ value))
-        $ Map.toList s
-      resultToPrint = (pack . show $ ix) <> ": " <> intercalate ", " vars
-    TIO.putStrLn resultToPrint
+      whileExitCond =
+        BoolCond
+          (BoolCond annotation And (NotCond whileCond))
+          Implication
+          postCond
+      whileEnterCond =
+        BoolCond
+          (BoolCond annotation And whileCond)
+          Implication
+          doAnnotation
+    pure $ doConds ++ [whileExitCond, whileEnterCond]
 
-defaultStates :: States
-defaultStates = Set.singleton (State Map.empty)
-
-type Result' a = Either Text a
-type Result = Result' States
-
-failureCase :: Show a => a -> Result' b
-failureCase x = Left $ "Undefined case: " <> pack (show x)
-
-fail :: Text -> Result' a
-fail = Left
-
-setVarInState :: State -> VarIdent -> TPLInt -> State
-setVarInState (State vars) (VarIdent varName) value =
-  State $ Map.insert varName value vars
-
-getVarFromState :: State -> VarIdent -> Result' TPLInt
-getVarFromState (State vars) (VarIdent varName) = case Map.lookup varName vars of
-  Just x -> pure x
-  Nothing -> fail $ "No var: " <> varName
-
-transExpr :: State -> Expr -> Result' TPLInt
-transExpr s x = case x of
-  ExprVar varident -> getVarFromState s varident
-  ExprConst integer -> pure $ fromInteger integer
-  ExprOp expr1 intop expr2 -> do
-    i1 <- transExpr s expr1
-    i2 <- transExpr s expr2
-    pure $ transIntOp intop i1 i2
-
-transIntOp :: IntOp -> TPLInt -> TPLInt -> TPLInt
-transIntOp x = case x of
-  Plus -> (+)
-  Minus -> (-)
-  Multiply -> (*)
-  Div -> div
-  Mod -> mod
-
--- req |> dataFromSupplier |> F |> toDb |> toRespons
-
-transIntCondOp :: IntCondOp -> TPLInt -> TPLInt -> Bool
-transIntCondOp x = case x of
-  Eq -> (==)
-  NotEq -> (/=)
-  Gt -> (>)
-  GtEq -> (>=)
-  Lt -> (<)
-  LtEq -> (<=)
-
-transBoolCondOp :: BoolCondOp -> Bool -> Bool -> Bool
-transBoolCondOp x = case x of
-  Or -> (||)
-  And -> (&&)
-
-transCond :: State -> Cond -> Result' Bool
-transCond s x = case x of
-  IntCond expr1 intcondop expr2 -> do
-    i1 <- transExpr s expr1
-    i2 <- transExpr s expr2
-    pure $ transIntCondOp intcondop i1 i2
-  BoolCond cond1 boolcondop cond2 -> do
-    c1 <- transCond s cond1
-    c2 <- transCond s cond2
-    pure $ transBoolCondOp boolcondop c1 c2
-  NotCond cond -> do
-    c <- transCond s cond
-    pure $ not c
-
-traverseStates :: States -> (State -> Result' [State]) -> Result
-traverseStates (Set.toList -> states) = fmap (Set.fromList . join) . for states
-
-transStatement :: States -> Statement -> Result
-transStatement states x = case x of
-  Assign varident expr -> traverseStates states $ \s -> do
-    i <- transExpr s expr
-    pure [setVarInState s varident i]
-  Test cond -> traverseStates states $ \s -> do
-    isOk <- transCond s cond
-    pure $ bool [] [s] isOk
-  Composition statements -> do
-    let
-      go [] states' = pure states'
-      go (s:xs) states' = transStatement states' s >>= go xs
-    go statements states
-  Union statement1 statement2 -> do
-    states1 <- transStatement states statement1
-    states2 <- transStatement states statement2
-    pure $ Set.union states1 states2
-  Closure statement -> do
-    newStates <- transStatement states statement
-    -- traceM $ show states
-    -- traceM $ show newStates
-    -- traceM $ show (newStates == states)
-    -- traceM $ "=========="
-    if Set.union newStates states == states
-      then pure states
-      else transStatement (Set.union newStates states) (Closure statement)
+runProgram :: Program -> IO ()
+runProgram p = do
+  eConds <- runExceptT . runCheckerM $ genProgramVerificationConditions p
+  case eConds of
+    Left err -> do
+      putStrLn "Error:"
+      putStrLn err
+    Right conds -> do
+      for_ (zip [(1 :: Int)..] conds) $ \(ix, cond) -> do
+        putStr $ show ix <> ": "
+        putStrLn $ printTree cond
